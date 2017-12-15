@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+
+        <title>Image Scatterplot</title>
+
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css">
+
+        <style>
+            body {
+                user-select: none;
+                cursor: default;
+            }
+
+            .col > img {
+                border: 1px solid black;
+                cursor: pointer;
+                width: 100%;
+            }
+
+            button {
+                cursor: pointer;
+            }
+
+            input[type=file] {
+                display: none;
+            }
+
+            label {
+                padding: 5px;
+            }
+
+            input[type=radio] {
+                margin-right: 5px;
+            }
+
+            input[type=range] {
+                position: relative;
+                top: 5px;
+
+                margin-left: 15px;
+                margin-right: 15px;
+            }
+        </style>
+
+        <!-- Global Site Tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-107835512-1"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'UA-107835512-1');
+        </script>
+    </head>
+
+    <body>
+        <div class="container">
+            <div class="jumbotron" style="margin-top: 2em; padding-top: 2em; padding-bottom: 2em">
+                <h1 class="display-4">3D scatterplot of an image</h1>
+
+                <p class="lead">
+                    This is a tool to display all the colors in an image in a 3D scatterplot based on the pixel values. You can select your own image or click one of the existing images to view the scatterplot. Images you select are only processed in your browser.
+                </p>
+            </div>
+
+            <div class="row">
+                <div class="col-4">
+                    <div class="card">
+                        <div class="card-block" style="padding: 1em">
+                            <p>
+                                <button id="fileUploadButton" type="button" class="btn btn-primary btn-lg btn-block">Select your own image</button>
+                                <input id="fileUploader" type="file" accept="image/*" />
+                            </p>
+
+                            <div class="container">
+                                <div class="row">
+                                    <div class="col">
+                                        <img src="defaults/starrynight.jpg" onclick="selectImage(this.src)" />
+                                    </div>
+                                    <div class="col">
+                                        <img src="defaults/supperatemmaus.jpg" onclick="selectImage(this.src)" />
+                                    </div>
+                                </div>
+
+                                <div class="row" style="margin-top: 1em">
+                                    <div class="col">
+                                        <img src="defaults/monalisa.jpg" onclick="selectImage(this.src)" />
+                                    </div>
+                                    <div class="col">
+                                        <img src="defaults/baratfolies.jpg" onclick="selectImage(this.src)" />
+                                    </div>
+                                </div>
+
+                                <div class="row" style="margin-top: 1em">
+                                    <div class="col">
+                                        <img src="defaults/dunes.jpg" onclick="selectImage(this.src)" />
+                                    </div>
+                                    <div class="col">
+                                        <img src="defaults/noise.png" onclick="selectImage(this.src)" />
+                                    </div>
+                                </div>
+
+                                <div class="row" style="margin-top: 1em">
+                                    <div class="col">
+                                        <img id="userImage" src="" onclick="selectImage(this.src)" />
+                                    </div>
+                                    <div class="col"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-8">
+                    <div class="card">
+                        <div class="card-block" style="padding: 1em">
+                            <p>
+                                <label><input type="radio" name="colorSpace" value="rgb" checked>RGB</label>
+                                <label><input type="radio" name="colorSpace" value="hsv">HSV</label>
+                                <label><input type="radio" name="colorSpace" value="hsl">HSL</label>
+                                <label><input type="radio" name="colorSpace" value="lab">LAB</label>
+
+                                <label><input type="range" min="1" max="20" value="5" class="slider" id="dotSize">Dot size</label>
+                            </p>
+
+                            <div id="scatterPlot" style="width: 700px; height: 700px"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p>
+                Developed by <a href="https://while.io">Alexander Overvoorde</a> at <a href="https://seriouscompany.nl">Serious Company</a>
+            </p>
+        </div>
+
+        <!-- Elements to move image pixels to JavaScript -->
+        <div style="overflow: hidden; height: 0">
+            <img id="tmpImg" style="visibility: hidden" />
+            <canvas id="tmpCanvas" style="visibility: hidden" />
+        </div>
+
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+        <script src="thirdparty/conversions.js"></script>
+        <script>
+            var fileUploadButton = document.getElementById('fileUploadButton');
+            var fileUploader = document.getElementById('fileUploader');
+
+            var dotSize = document.getElementById('dotSize');
+
+            var tmpImg = document.getElementById('tmpImg');
+            var tmpCanvas = document.getElementById('tmpCanvas');
+            var tmpCanvasCtx = tmpCanvas.getContext('2d');
+
+            // Add handling for custom image upload
+            fileUploadButton.addEventListener('click', function() {
+                fileUploader.click();
+            });
+
+            fileUploader.addEventListener('change', function() {
+                if (this.files.length === 0) {
+                    return;
+                }
+
+                // Load image through img tag
+                //
+                // Images are resized to have a height of 60 to limit the number
+                // of points for performance
+                URL.revokeObjectURL(tmpImg.src);
+
+                var objURL = URL.createObjectURL(this.files[0]);
+                tmpImg.height = 60;
+                tmpImg.src = objURL;
+                userImage.src = objURL;
+            });
+
+            var currentPixels = null;
+            tmpImg.onload = function() {
+                // Paint uploaded image to canvas to retrieve pixels
+                var w = tmpCanvas.width = tmpImg.clientWidth;
+                var h = tmpCanvas.height = tmpImg.clientHeight;
+
+                tmpCanvasCtx.drawImage(tmpImg, 0, 0, w, h);
+                var pixels = tmpCanvasCtx.getImageData(0, 0, w, h).data;
+
+                currentPixels = pixels;
+                updateScatterPlot(pixels);
+            };
+
+            // Add handling for color space selection
+            var colorSpace = 'rgb';
+
+            var colorSpaceRadios = document.querySelectorAll('input[name="colorSpace"]');
+            for (var i = 0; i < colorSpaceRadios.length; i++) {
+                colorSpaceRadios[i].addEventListener('click', function() {
+                    colorSpace = document.querySelector('input[name="colorSpace"]:checked').value;
+                    updateScatterPlot(currentPixels);
+                });
+            }
+
+            // Add handling for marker size selection
+            dotSize.addEventListener('input', function() {
+                Plotly.restyle('scatterPlot', {
+                    'marker.size': dotSize.value
+                });
+            });
+
+            // Select default image
+            function selectImage(url) {
+                tmpImg.height = 60;
+                tmpImg.src = url;
+            }
+
+            // Scatterplot drawing code
+            function updateScatterPlot(pixels) {
+                // Create markers for points
+                var x = [];
+                var y = [];
+                var z = [];
+                var colors = [];
+
+                for (var i = 0; i < pixels.length; i += 4) {
+                    var r = pixels[i + 0];
+                    var g = pixels[i + 1];
+                    var b = pixels[i + 2];
+
+                    if (colorSpace === 'rgb') {
+                        x.push(r);
+                        y.push(g);
+                        z.push(b);
+                    } else if (colorSpace === 'hsv') {
+                        var components = convert.rgb.hsv([r, g, b]);
+                        x.push(components[0]);
+                        y.push(components[1]);
+                        z.push(components[2]);
+                    } else if (colorSpace === 'hsl') {
+                        var components = convert.rgb.hsl([r, g, b]);
+                        x.push(components[0]);
+                        y.push(components[1]);
+                        z.push(components[2]);
+                    } else if (colorSpace === 'lab') {
+                        var components = convert.rgb.lab([r, g, b]);
+                        x.push(components[0]);
+                        y.push(components[1]);
+                        z.push(components[2]);
+                    }
+
+                    colors.push('rgb(' + r + ',' + g + ',' + b + ')');
+                }
+
+                // Display scatter plot
+                var trace = {
+                    x: x,
+                    y: y,
+                    z: z,
+                    mode: 'markers',
+                    type: 'scatter3d',
+                    name: 'Colors',
+                    marker: {
+                        size: dotSize.value,
+                        color: colors
+                    }
+                };
+
+                var data = [trace];
+
+                var layout = {
+                    scene: {
+                        camera: {
+                            eye: {x: 0.001, y: -2, z: 1},
+                            center: {x: 0, y: 0, z: 0}
+                        }
+                    },
+                    margin: {
+                        l: 0,
+                        r: 0,
+                        t: 0,
+                        b: 0,
+                        pad: 0
+                    }
+                };
+
+                if (colorSpace === 'rgb') {
+                    layout.scene.xaxis = {title: 'R', range: [0, 255]};
+                    layout.scene.yaxis = {title: 'G', range: [0, 255]};
+                    layout.scene.zaxis = {title: 'B', range: [0, 255]};
+                } else if (colorSpace === 'hsv') {
+                    layout.scene.xaxis = {title: 'H', range: [0, 360]};
+                    layout.scene.yaxis = {title: 'S', range: [0, 100]};
+                    layout.scene.zaxis = {title: 'V', range: [0, 100]};
+                } else if (colorSpace === 'hsl') {
+                    layout.scene.xaxis = {title: 'H', range: [0, 360]};
+                    layout.scene.yaxis = {title: 'S', range: [0, 100]};
+                    layout.scene.zaxis = {title: 'L', range: [0, 100]};
+                } else if (colorSpace === 'lab') {
+                    layout.scene.xaxis = {title: 'L*', range: [0, 100]};
+                    layout.scene.yaxis = {title: 'a*', range: [-86.185, 98.254]};
+                    layout.scene.zaxis = {title: 'b*', range: [-107.863, 94.482]};
+                }
+
+                Plotly.purge('scatterPlot');
+                Plotly.newPlot('scatterPlot', data, layout, {
+                    displayModeBar: false
+                });
+            }
+
+            // Select initial image
+            selectImage('defaults/starrynight.jpg');
+        </script>
+    </body>
+</html>
