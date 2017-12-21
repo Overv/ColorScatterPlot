@@ -41,6 +41,8 @@
 
                 margin-left: 15px;
                 margin-right: 15px;
+
+                width: 80px;
             }
         </style>
 
@@ -123,6 +125,8 @@
                                 <label><input type="radio" name="colorSpace" value="lab">LAB</label>
 
                                 <label><input type="range" min="1" max="20" value="5" class="slider" id="dotSize">Dot size</label>
+
+                                <label><input type="range" min="4500" max="20000" value="4500" class="slider" id="pointCount">Point count</label>
                             </p>
 
                             <div id="scatterPlot" style="width: 700px; height: 700px"></div>
@@ -132,7 +136,7 @@
             </div>
 
             <p>
-                Developed by <a href="https://while.io">Alexander Overvoorde</a> at <a href="https://seriouscompany.nl">Serious Company</a>
+                Developed by <a href="https://while.io">Alexander Overvoorde</a> at <a href="https://seriouscompany.nl">Serious Company</a> (<a href="https://github.com/Overv/ColorScatterPlot">GitHub repository</a>)
             </p>
         </div>
 
@@ -148,7 +152,8 @@
             var fileUploadButton = document.getElementById('fileUploadButton');
             var fileUploader = document.getElementById('fileUploader');
 
-            var dotSize = document.getElementById('dotSize');
+            var dotSizeEl = document.getElementById('dotSize');
+            var pointCountEl = document.getElementById('pointCount');
 
             var tmpImg = document.getElementById('tmpImg');
             var tmpCanvas = document.getElementById('tmpCanvas');
@@ -171,7 +176,6 @@
                 URL.revokeObjectURL(tmpImg.src);
 
                 var objURL = URL.createObjectURL(this.files[0]);
-                tmpImg.height = 60;
                 tmpImg.src = objURL;
                 userImage.src = objURL;
             });
@@ -179,8 +183,8 @@
             var currentPixels = null;
             tmpImg.onload = function() {
                 // Paint uploaded image to canvas to retrieve pixels
-                var w = tmpCanvas.width = tmpImg.clientWidth;
-                var h = tmpCanvas.height = tmpImg.clientHeight;
+                var w = tmpCanvas.width = tmpImg.naturalWidth;
+                var h = tmpCanvas.height = tmpImg.naturalHeight;
 
                 tmpCanvasCtx.drawImage(tmpImg, 0, 0, w, h);
                 var pixels = tmpCanvasCtx.getImageData(0, 0, w, h).data;
@@ -201,10 +205,15 @@
             }
 
             // Add handling for marker size selection
-            dotSize.addEventListener('input', function() {
+            dotSizeEl.addEventListener('input', function() {
                 Plotly.restyle('scatterPlot', {
-                    'marker.size': dotSize.value
+                    'marker.size': dotSizeEl.value
                 });
+            });
+
+            // Add handling for point count selection
+            pointCountEl.addEventListener('change', function() {
+                updateScatterPlot(currentPixels);
             });
 
             // Select default image
@@ -221,7 +230,11 @@
                 var z = [];
                 var colors = [];
 
-                for (var i = 0; i < pixels.length; i += 4) {
+                var pixelCount = pixels.length / 4;
+                var skipPixels = Math.max(1, pixelCount / pointCountEl.value);
+                skipPixels = Math.round(skipPixels) * 4;
+
+                for (var i = 0; i < pixels.length; i += skipPixels) {
                     var r = pixels[i + 0];
                     var g = pixels[i + 1];
                     var b = pixels[i + 2];
@@ -259,7 +272,7 @@
                     type: 'scatter3d',
                     name: 'Colors',
                     marker: {
-                        size: dotSize.value,
+                        size: dotSizeEl.value,
                         color: colors
                     }
                 };
